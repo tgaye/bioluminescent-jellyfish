@@ -1,0 +1,364 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bioluminescent Jellyfish</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: linear-gradient(135deg, #001f3f 0%, #003366 50%, #001a33 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #canvas-container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            position: relative;
+        }
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            color: rgba(255, 255, 255, 0.6);
+            text-align: center;
+            width: 100%;
+            font-size: 14px;
+            pointer-events: none;
+        }
+    </style>
+
+<base target="_self">
+
+
+    </head><body><div id="canvas-container">
+        <div class="instructions">Move your cursor to attract jellyfish<br>Click to create a new jellyfish</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.8.0/lib/p5.js"></script>
+    <script>
+        const sketch = (p) => {
+            // Jellyfish class
+            class Jellyfish {
+                constructor(x, y, size) {
+                    this.pos = p.createVector(x, y);
+                    this.vel = p.createVector(p.random(-0.5, 0.5), p.random(-0.5, 0.5));
+                    this.acc = p.createVector();
+                    this.size = size || p.random(30, 80);
+                    this.tentacleCount = Math.floor(p.random(5, 10));
+                    this.tentacleLength = this.size * 1.5;
+                    this.pulseSpeed = p.random(0.01, 0.03);
+                    this.pulsePhase = p.random(p.TWO_PI);
+                    this.color = p.color(
+                        p.random(150, 255),
+                        p.random(100, 200),
+                        p.random(200, 255),
+                        p.random(150, 200)
+                    );
+                    this.maxSpeed = p.random(0.5, 1.5);
+                    this.wanderAngle = 0;
+                    this.trail = [];
+                    this.maxTrail = 10;
+                }
+
+                update(mouseX, mouseY) {
+                    // Apply wander behavior
+                    this.wander();
+                    
+                    // Apply attraction to mouse
+                    if (mouseX && mouseY) {
+                        const mouseDist = p.dist(this.pos.x, this.pos.y, mouseX, mouseY);
+                        if (mouseDist < 300) {
+                            const attractForce = p.createVector(mouseX - this.pos.x, mouseY - this.pos.y);
+                            attractForce.setMag(p.map(mouseDist, 0, 300, 0.5, 0.1));
+                            this.acc.add(attractForce);
+                        }
+                    }
+
+                    // Update physics
+                    this.vel.add(this.acc);
+                    this.vel.limit(this.maxSpeed);
+                    this.pos.add(this.vel);
+                    this.acc.mult(0);
+
+                    // Boundary check
+                    this.bounceEdges();
+
+                    // Update pulse animation
+                    this.pulsePhase += this.pulseSpeed;
+
+                    // Update trail
+                    this.trail.push(p.createVector(this.pos.x, this.pos.y));
+                    if (this.trail.length > this.maxTrail) {
+                        this.trail.shift();
+                    }
+                }
+
+                wander() {
+                    const wanderRadius = 15;
+                    const wanderDistance = 50;
+                    const wanderChange = 0.3;
+                    
+                    this.wanderAngle += p.random(-wanderChange, wanderChange);
+                    const wanderTarget = p.createVector(
+                        wanderRadius * p.cos(this.wanderAngle),
+                        wanderRadius * p.sin(this.wanderAngle)
+                    );
+                    wanderTarget.add(p.createVector(wanderDistance, 0));
+                    
+                    const worldWanderTarget = p5.Vector.add(this.pos, wanderTarget);
+                    const steer = p5.Vector.sub(worldWanderTarget, this.pos);
+                    steer.setMag(0.1);
+                    this.acc.add(steer);
+                }
+
+                bounceEdges() {
+                    const margin = 50;
+                    const bounce = 0.5;
+                    
+                    if (this.pos.x < margin) {
+                        this.pos.x = margin;
+                        this.vel.x *= -bounce;
+                    } else if (this.pos.x > p.width - margin) {
+                        this.pos.x = p.width - margin;
+                        this.vel.x *= -bounce;
+                    }
+                    
+                    if (this.pos.y < margin) {
+                        this.pos.y = margin;
+                        this.vel.y *= -bounce;
+                    } else if (this.pos.y > p.height - margin) {
+                        this.pos.y = p.height - margin;
+                        this.vel.y *= -bounce;
+                    }
+                }
+
+                display() {
+                    p.push();
+                    p.translate(this.pos.x, this.pos.y);
+                    
+                    // Draw glow
+                    const pulseSize = this.size * (1 + 0.2 * p.sin(this.pulsePhase));
+                    p.drawingContext.shadowBlur = 30;
+                    p.drawingContext.shadowColor = p.color(
+                        p.red(this.color),
+                        p.green(this.color),
+                        p.blue(this.color),
+                        150
+                    );
+                    
+                    // Draw bell
+                    p.fill(this.color);
+                    p.noStroke();
+                    p.ellipse(0, 0, pulseSize, pulseSize * 0.8);
+                    
+                    // Draw tentacles
+                    for (let i = 0; i < this.tentacleCount; i++) {
+                        const angle = p.map(i, 0, this.tentacleCount, 0, p.TWO_PI);
+                        const tentacleWobble = p.sin(this.pulsePhase * 2 + i * 0.5) * 0.3;
+                        
+                        p.beginShape();
+                        p.vertex(0, 0);
+                        for (let j = 1; j <= 5; j++) {
+                            const y = p.map(j, 1, 5, 0, this.tentacleLength);
+                            const x = tentacleWobble * this.size * 0.5 * p.sin(y * 0.1 + this.pulsePhase * 3);
+                            p.curveVertex(x, y);
+                        }
+                        p.endShape();
+                    }
+                    
+                    // Draw trail
+                    if (this.trail.length > 1) {
+                        p.noFill();
+                        p.stroke(p.red(this.color), p.green(this.color), p.blue(this.color), 50);
+                        p.strokeWeight(2);
+                        p.beginShape();
+                        for (let i = 0; i < this.trail.length; i++) {
+                            const point = this.trail[i];
+                            p.vertex(point.x, point.y);
+                        }
+                        p.endShape();
+                    }
+                    
+                    p.pop();
+                    p.drawingContext.shadowBlur = 0;
+                }
+            }
+
+            // Particle system for bubbles
+            class Bubble {
+                constructor(x, y) {
+                    this.pos = p.createVector(x, y);
+                    this.vel = p.createVector(p.random(-0.2, 0.2), p.random(-3, -1));
+                    this.size = p.random(5, 15);
+                    this.life = p.random(100, 200);
+                    this.maxLife = this.life;
+                    this.color = p.color(150, 200, 255, 100);
+                }
+
+                update() {
+                    this.pos.add(this.vel);
+                    this.life--;
+                }
+
+                display() {
+                    const alpha = p.map(this.life, this.maxLife, 0, 100, 0);
+                    p.fill(p.red(this.color), p.green(this.color), p.blue(this.color), alpha);
+                    p.noStroke();
+                    p.ellipse(this.pos.x, this.pos.y, this.size);
+                }
+
+                isDead() {
+                    return this.life <= 0 || this.pos.y < -this.size;
+                }
+            }
+
+            // Main variables
+            let jellyfish = [];
+            let bubbles = [];
+            let lastBubbleTime = 0;
+            let bgNoiseOffset = 0;
+            let lightRays = [];
+            let performanceMode = false;
+
+            p.setup = () => {
+                const container = document.getElementById('canvas-container');
+                const canvasWidth = Math.min(1200, p.windowWidth - 40);
+                const canvasHeight = Math.min(800, p.windowHeight - 40);
+                
+                let canvas = p.createCanvas(canvasWidth, canvasHeight);
+                canvas.parent('canvas-container');
+                
+                // Create initial jellyfish
+                for (let i = 0; i < 5; i++) {
+                    jellyfish.push(new Jellyfish(
+                        p.random(p.width),
+                        p.random(p.height),
+                        p.random(40, 80)
+                    ));
+                }
+                
+                // Create light rays
+                for (let i = 0; i < 8; i++) {
+                    lightRays.push({
+                        x: p.random(p.width),
+                        width: p.random(2, 5),
+                        speed: p.random(0.2, 0.5),
+                        opacity: p.random(30, 80)
+                    });
+                }
+            };
+
+            p.draw = () => {
+                // Check performance and adjust if needed
+                if (p.frameCount % 60 === 0 && p.frameRate() < 30) {
+                    performanceMode = true;
+                } else if (p.frameRate() > 50) {
+                    performanceMode = false;
+                }
+                
+                // Draw background
+                drawBackground();
+                
+                // Update and display jellyfish
+                for (let j of jellyfish) {
+                    j.update(p.mouseX, p.mouseY);
+                    j.display();
+                }
+                
+                // Update and display bubbles
+                for (let i = bubbles.length - 1; i >= 0; i--) {
+                    bubbles[i].update();
+                    bubbles[i].display();
+                    if (bubbles[i].isDead()) {
+                        bubbles.splice(i, 1);
+                    }
+                }
+                
+                // Add new bubbles occasionally
+                if (p.millis() - lastBubbleTime > 200 && !performanceMode) {
+                    if (p.random() < 0.3) {
+                        bubbles.push(new Bubble(
+                            p.random(p.width),
+                            p.height + 10
+                        ));
+                        lastBubbleTime = p.millis();
+                    }
+                }
+            };
+
+            function drawBackground() {
+                // Gradient background
+                const gradient = p.drawingContext.createLinearGradient(0, 0, 0, p.height);
+                gradient.addColorStop(0, '#001a33');
+                gradient.addColorStop(0.5, '#003366');
+                gradient.addColorStop(1, '#001f3f');
+                p.drawingContext.fillStyle = gradient;
+                p.drawingContext.fillRect(0, 0, p.width, p.height);
+                
+                // Light rays
+                p.noStroke();
+                for (let ray of lightRays) {
+                    ray.x += ray.speed;
+                    if (ray.x > p.width + 100) ray.x = -100;
+                    
+                    p.fill(200, 230, 255, ray.opacity);
+                    p.beginShape();
+                    p.vertex(ray.x - ray.width, 0);
+                    p.vertex(ray.x + ray.width, 0);
+                    p.vertex(ray.x + ray.width * 2, p.height);
+                    p.vertex(ray.x - ray.width * 2, p.height);
+                    p.endShape();
+                }
+                
+                // Noise-based caustics effect
+                bgNoiseOffset += 0.01;
+                p.noStroke();
+                p.fill(255, 255, 255, 5);
+                const gridSize = 30;
+                for (let x = 0; x < p.width; x += gridSize) {
+                    for (let y = 0; y < p.height; y += gridSize) {
+                        const n = p.noise(x * 0.01, y * 0.01, bgNoiseOffset);
+                        const s = p.map(n, 0, 1, gridSize * 0.5, gridSize * 1.5);
+                        p.ellipse(x, y, s, s);
+                    }
+                }
+            }
+
+            p.mousePressed = () => {
+                // Add new jellyfish on click
+                if (p.mouseX > 0 && p.mouseX < p.width && p.mouseY > 0 && p.mouseY < p.height) {
+                    jellyfish.push(new Jellyfish(p.mouseX, p.mouseY, p.random(30, 70)));
+                    
+                    // Limit number of jellyfish for performance
+                    if (jellyfish.length > 15) {
+                        jellyfish.shift();
+                    }
+                    
+                    // Add bubble burst
+                    for (let i = 0; i < 10; i++) {
+                        bubbles.push(new Bubble(p.mouseX, p.mouseY));
+                    }
+                }
+            };
+
+            p.windowResized = () => {
+                const canvasWidth = Math.min(1200, p.windowWidth - 40);
+                const canvasHeight = Math.min(800, p.windowHeight - 40);
+                p.resizeCanvas(canvasWidth, canvasHeight);
+            };
+        };
+
+        new p5(sketch);
+    </script>
+
+              
+          
+                
+          
+              
+</body></html>
